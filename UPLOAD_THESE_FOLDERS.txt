@@ -1,0 +1,22 @@
+LUMEN QUEST ASSET REPAIR
+
+The production app is running, but the artwork is missing because the assets folder was not uploaded to the GitHub repository.
+
+1. Open the existing lumen-quest GitHub repository.
+2. Click Add file -> Upload files.
+3. DRAG the entire "assets" folder and the entire "api" folder from this repair package into the GitHub upload area. Do not use the normal file picker for the folders; drag them from File Explorer so GitHub preserves the folder paths.
+4. Commit directly to the main branch.
+5. Vercel will automatically create a new production deployment.
+
+At the repo root you should then see:
+/assets
+/api
+app.js
+styles.css
+index.html
+package.json
+vercel.json
+manifest.webmanifest
+sw.js
+
+The hero artwork should resolve at /assets/hero_original.jpg.
