@@ -1,20 +1,27 @@
-# Lumen Quest — Vercel Ready
+# Lumen Quest — visual-preservation rebuild
 
-This folder is ready to deploy on Vercel through a Git-connected project.
+This Vercel-ready build preserves the original Lumen Quest visual language while adding the expanded region/monster system and the requested study behavior.
 
-## Required files in the repository root
-- `index.html`
-- `styles.css`
-- `app.js`
-- `api/config.js`
-- `api/generate.js`
-- `package.json`
-- `vercel.json`
+## Included
+- Original-style Lumen Quest home/header/hero presentation
+- 6 rotating regions, 5 named creature variants per region
+- One persistent subject game per note package
+- Update Notes replaces the package without replacing the quest/stats
+- Searchable PDF/TXT/Markdown extraction in browser
+- Scientific calculator from every question
+- Wrong answers deal damage but do not reveal the correct answer
+- Wrong-answer explanation is delivered by the enemy
+- Missed concepts return 3–5 questions later
+- Retries use fresh wording/examples via the AI prompt
+- OpenAI + Gemini + local fallback
+- IndexedDB note storage to avoid localStorage-size failures
+- PWA install support
 
-## AI configuration
-The app works without an AI key by falling back to note-based local questions.
-For OpenAI-generated questions, add `OPENAI_API_KEY` as a Vercel Environment Variable.
-Optional: `OPENAI_MODEL` (defaults to `gpt-5.6-luna`).
-For Gemini, add `GEMINI_API_KEY`; optional `GEMINI_MODEL` defaults to `gemini-2.5-flash`.
+## Vercel environment variables
+Recommended:
+- `OPENAI_API_KEY`
+- optional `OPENAI_MODEL` (defaults to `gpt-5.6-luna`)
+- optional `GEMINI_API_KEY`
+- optional `GEMINI_MODEL`
 
-Never commit API keys to GitHub.
+Do not commit API keys into GitHub.

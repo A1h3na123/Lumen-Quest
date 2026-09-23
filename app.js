@@ -1,306 +1,78 @@
-const app = document.querySelector('#app');
-const toastEl = document.querySelector('#toast');
-const STORE_KEY = 'lumenQuest.v2';
-const AI_KEY = 'lumenQuest.ai.session';
+const app=document.querySelector('#app');
+const toastEl=document.querySelector('#toast');
+const STORE='lumenQuest.v3.meta';const AI_STORE='lumenQuest.ai.session';const DB='lumenQuest.v3.notes';
+let state=loadMeta();let run=null;let serverConfig={openaiConfigured:false,geminiConfigured:false};let installPrompt=null;
 
-const REGIONS = [
-  {id:'forest', name:'Moonlit Grove', subtitle:'Ancient trees, crystal roots, and living runes', monsters:['Mossfang','Thornmaw','Bramblehorn','Virid Wisp','Elderbark']},
-  {id:'snow', name:'Frostbound Reach', subtitle:'Icefields, aurora ruins, and frozen sigils', monsters:['Cryofang','Rimehorn','Glaciera','Snowclaw','Shardwyrm']},
-  {id:'underworld', name:'Ashen Underworld', subtitle:'Obsidian caverns, ember rivers, and cursed gates', monsters:['Cindermaw','Hexflare','Obsidrax','Ember Wraith','Dreadhoof']},
-  {id:'kingdom', name:'Sunspire Kingdom', subtitle:'Golden towers, old libraries, and royal battlements', monsters:['Gilded Sentinel','Crownfang','Runeknight','Aurelia Golem','Bannerbeast']},
-  {id:'coast', name:'Stormglass Coast', subtitle:'Black cliffs, lightning seas, and drowned shrines', monsters:['Tempest Drake','Tideclaw','Brinegeist','Voltfin','Stormshell']},
-  {id:'astral', name:'Astral Ruins', subtitle:'Star-vaults, broken moons, and impossible temples', monsters:['Nebulisk','Starforged Golem','Voidling','Cometjaw','Eclipse Wyrm']}
+const icon=(name)=>({
+  upload:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V3m0 0L7 8m5-5 5 5"/><path d="M5 13v7h14v-7"/></svg>`,
+  calc:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2m3 0h3M8 15h2m3 0h3M8 18h2m3 0h3"/></svg>`,
+  ai:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5L12 2Z"/><path d="M19 13l.8 2.2L22 16l-2.2.8L19 19l-.8-2.2L16 16l2.2-.8L19 13ZM5 14l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3Z"/></svg>`,
+  install:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v11m0 0 4-4m-4 4-4-4"/><path d="M5 15v5h14v-5"/></svg>`,
+  sound:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 9h4l5-4v14l-5-4H5z"/><path d="M18 9c1.5 1.5 1.5 4.5 0 6"/></svg>`
+}[name]||'');
+const logo=`<svg viewBox="0 0 50 50" fill="none"><path d="M25 4l4 13 13 4-13 4-4 13-4-13-13-4 13-4 4-13Z" stroke="#d9efb0" stroke-width="3"/><path d="M40 6v9M35.5 10.5h9" stroke="#d9efb0" stroke-width="3" stroke-linecap="round"/></svg>`;
+
+const REGIONS=[
+ {id:'moonlit',name:'Moonlit Grove',subtitle:'Ancient ruins, moonlit water, living crystal.',asset:'moonlit',monsters:['Mossfang Guardian','Bramblehart Stag','Ruinroot Colossus','Virid Wisp','Moonclaw Lynx']},
+ {id:'frostpeak',name:'Frostpeak Tundra',subtitle:'Icy peaks, old citadels, aurora-lit snow.',asset:'frostpeak',monsters:['Glacivyrm','Froststag','Shiverfen','Cryowolf','Ice Specter']},
+ {id:'emberdepths',name:'Emberdepths',subtitle:'Volcanic vaults, ember rivers, obsidian ruins.',asset:'emberdepths',monsters:['Cindermaw','Ashhorn','Pyreborn','Magma Coil','Infernal Hound']},
+ {id:'crownfall',name:'Crownfall Kingdom',subtitle:'Golden towers, royal libraries, broken banners.',asset:'crownfall',monsters:['Dawnwing Gryphon','Gilded Knight','Aurelion Stag','Seraph Warden','Suncrest Chimera']},
+ {id:'astral',name:'Astral Sanctum',subtitle:'Floating towers, star-vaults, impossible skies.',asset:'astral',monsters:['Rift Serpent','Starfeather Roc','Prism Manta','Void Lancer','Comet Wyrm']},
+ {id:'verdant',name:'Verdant Wilds',subtitle:'Primeval groves, giant roots, forgotten shrines.',asset:'verdant',monsters:['Thornback','Elderwood Bear','Moss Troll','Bloomfang','Grove Keeper']}
 ];
 
-let state = loadState();
-let session = null;
-let modalCleanup = null;
-let serverConfig = {openaiConfigured:false, geminiConfigured:false};
-
-function loadState(){
-  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {quests:[],settings:{sound:true}}; }
-  catch { return {quests:[],settings:{sound:true}}; }
-}
-function saveState(){ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
-function id(){ return crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`; }
 function esc(s=''){return String(s).replace(/[&<>'"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[m]));}
-function rand(arr){return arr[Math.floor(Math.random()*arr.length)]}
-function shuffle(arr){return [...arr].sort(()=>Math.random()-.5)}
-function toast(msg){toastEl.textContent=msg;toastEl.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>toastEl.classList.remove('show'),2600)}
-function dateLabel(ts){try{return new Date(ts).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}catch{return ''}}
+function loadMeta(){try{return JSON.parse(localStorage.getItem(STORE))||{quests:[],settings:{sound:true}}}catch{return{quests:[],settings:{sound:true}}}}
+function saveMeta(){localStorage.setItem(STORE,JSON.stringify(state))}
+function uid(){return crypto.randomUUID?.()||`${Date.now()}-${Math.random().toString(16).slice(2)}`}
+function toast(t){toastEl.textContent=t;toastEl.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>toastEl.classList.remove('show'),2500)}
+function rand(a){return a[Math.floor(Math.random()*a.length)]}
+function dateLabel(ts){try{return new Date(ts).toLocaleDateString(undefined,{month:'short',day:'numeric'})}catch{return''}}
 
-async function refreshConfig(){
-  try { serverConfig = await fetch('/api/config').then(r=>r.json()); }
-  catch { serverConfig = {openaiConfigured:false, geminiConfigured:false}; }
-}
+function openDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open(DB,1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('notes'))r.result.createObjectStore('notes')};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+async function notesPut(key,text){const db=await openDB();return new Promise((resolve,reject)=>{const tx=db.transaction('notes','readwrite');tx.objectStore('notes').put(text,key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)})}
+async function notesGet(key){const db=await openDB();return new Promise((resolve,reject)=>{const r=db.transaction('notes').objectStore('notes').get(key);r.onsuccess=()=>resolve(r.result||'');r.onerror=()=>reject(r.error)})}
+async function notesDelete(key){const db=await openDB();return new Promise((resolve)=>{const tx=db.transaction('notes','readwrite');tx.objectStore('notes').delete(key);tx.oncomplete=resolve;tx.onerror=resolve})}
 
-function aiSession(){
-  try{return JSON.parse(sessionStorage.getItem(AI_KEY))||{provider:'auto',openaiKey:'',geminiKey:''}}
-  catch{return {provider:'auto',openaiKey:'',geminiKey:''}}
-}
-function saveAiSession(x){sessionStorage.setItem(AI_KEY,JSON.stringify(x))}
+function aiPrefs(){try{return JSON.parse(sessionStorage.getItem(AI_STORE))||{provider:'auto',openaiKey:'',geminiKey:''}}catch{return{provider:'auto',openaiKey:'',geminiKey:''}}}
+function saveAiPrefs(p){sessionStorage.setItem(AI_STORE,JSON.stringify(p))}
+async function refreshConfig(){try{serverConfig=await fetch('/api/config').then(r=>r.json())}catch{serverConfig={openaiConfigured:false,geminiConfigured:false}}}
 
-function shell(content, battle=false){
-  app.innerHTML=`<div class="app-shell">
-    <header class="topbar">
-      <div class="brand" data-home><span class="brand-orb"></span>LUMEN QUEST</div>
-      <div class="top-actions">
-        <span class="badge"><span class="dot ${serverConfig.openaiConfigured?'on':''}"></span>OpenAI ${serverConfig.openaiConfigured?'ready':'optional'}</span>
-        <button class="btn ghost" data-calc>Calculator</button>
-        <button class="btn ghost" data-ai>Connect AI</button>
-        ${battle?'<button class="btn ghost" data-exit>Quest Library</button>':''}
-      </div>
-    </header>
-    ${battle?content:`<main>${content}</main>`}
-  </div>`;
-  app.querySelector('[data-home]')?.addEventListener('click',()=>{session=null;renderHome()});
-  app.querySelector('[data-calc]')?.addEventListener('click',openCalculator);
-  app.querySelector('[data-ai]')?.addEventListener('click',openAiModal);
-  app.querySelector('[data-exit]')?.addEventListener('click',()=>{session=null;renderHome()});
-}
+function header(battle=false){return `<header class="topbar"><div class="brand" data-home>${logo}<strong><span>LUMEN</span> QUEST</strong></div><div class="top-actions"><button class="top-btn ai" data-ai>${icon('ai')}<span>${serverConfig.openaiConfigured?'OpenAI connected':'Sign in with ChatGPT'}</span></button><button class="top-btn" data-install>${icon('install')}<span>Install app</span></button><button class="top-btn" data-ai>${icon('ai')}<span>Connect AI</span></button><button class="top-btn top-icon" data-calc>${icon('calc')}</button><button class="top-btn top-icon" data-sound>${icon('sound')}</button>${battle?'<button class="top-btn" data-exit><span>Quest library</span></button>':''}</div></header>`}
+function mount(content,battle=false){app.innerHTML=`<div class="app-shell">${header(battle)}${content}</div>`;bindHeader()}
+function bindHeader(){app.querySelector('[data-home]')?.addEventListener('click',()=>{run=null;renderHome()});app.querySelectorAll('[data-ai]').forEach(b=>b.addEventListener('click',openAi));app.querySelector('[data-calc]')?.addEventListener('click',openCalculator);app.querySelector('[data-sound]')?.addEventListener('click',()=>{state.settings.sound=!state.settings.sound;saveMeta();toast(state.settings.sound?'Sound enabled':'Sound muted')});app.querySelector('[data-exit]')?.addEventListener('click',()=>{run=null;renderHome()});app.querySelector('[data-install]')?.addEventListener('click',async()=>{if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null}else toast('Use your browser menu → Install app / Add to Home Screen.')})}
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e});
 
+function hero(){return `<section class="archive-head"><div class="eyebrow">THE VERDANT ARCHIVE</div><h1>A new adventure awaits.</h1></section><section class="hero-original"><img src="/assets/hero_original.jpg" alt="Moonlit Grove with the Archive Mage and Mossfang Guardian"><button class="hero-hit hero-upload-hit" data-upload aria-label="Upload PDF notes">Upload</button><button class="hero-hit hero-demo-hit" data-demo aria-label="Play the demo">Demo</button></section>`}
+function regionCards(){return REGIONS.map(r=>`<article class="region-card"><img src="/assets/region_${r.asset}.jpg" alt="${esc(r.name)}"><div class="region-copy"><h3>${esc(r.name)}</h3><p>${esc(r.subtitle)}</p><div class="region-creatures">${r.monsters.map((m,i)=>`<img class="creature-dot" src="/assets/monster_${r.asset}_${i+1}.png" title="${esc(m)}" alt="${esc(m)}">`).join('')}</div></div></article>`).join('')}
 function renderHome(){
-  const cards = state.quests.length ? state.quests.map(q=>`
-    <article class="quest-card">
-      <div class="kicker">${esc(q.subject || 'STUDY QUEST')}</div>
-      <h3>${esc(q.title)}</h3>
-      <div class="meta">${esc((q.files||[]).map(f=>f.name).join(' · ') || 'Notes package')}<br>
-      Updated ${dateLabel(q.updatedAt)} · ${q.totalAnswered||0} answered · ${Math.round(((q.correct||0)/Math.max(1,q.totalAnswered||0))*100)}% accuracy</div>
-      <div class="quest-actions">
-        <button class="btn primary" data-play="${q.id}">Enter quest</button>
-        <button class="btn" data-update="${q.id}">Update notes</button>
-      </div>
-    </article>`).join('') : `<div class="empty-card">No subject quests yet. Upload your first notes package to begin.</div>`;
-  shell(`
-    <section class="hero">
-      <div>
-        <div class="kicker">YOUR STUDY ADVENTURE</div>
-        <h1>Learn the idea.<br>Earn the victory.</h1>
-        <p>Turn each subject note package into its own persistent RPG. Every time you enter a subject, Lumen Quest sends you to a different region with a new rotation of monsters. Questions are generated from your notes, reworded across attempts, and missed concepts return later instead of immediately revealing the answer.</p>
-        <div class="hero-actions"><button class="btn primary" data-upload>Upload notes</button><button class="btn gold" data-demo>Play demo</button></div>
-      </div>
-      <div class="hero-art"><div class="mini-scene"><div class="mini-tree tree-a"></div><div class="mini-tree tree-b"></div><div class="mini-tree tree-c"></div><div class="crystal c1"></div><div class="crystal c2"></div></div></div>
-    </section>
-    <div class="section-head"><div><div class="kicker">YOUR QUESTS</div><h2>Subject adventures</h2></div><p>One game per note package · Update notes without losing the quest</p></div>
-    <section class="quest-grid">${cards}</section>
-    <section class="how">
-      <div class="how-card"><div class="n">01 · BRING YOUR NOTES</div><h4>Upload a package</h4><p>PDF, text, or Markdown notes become a separate subject quest saved in this browser.</p></div>
-      <div class="how-card"><div class="n">02 · ENTER A REGION</div><h4>Battle something new</h4><p>Forest, snow, underworld, kingdom, coast, and astral regions rotate between sessions, each with five monsters.</p></div>
-      <div class="how-card"><div class="n">03 · LEARN, DON'T MEMORIZE</div><h4>Questions keep changing</h4><p>Missed concepts return a few questions later with different wording. Wrong answers explain the mistake without giving away the right answer.</p></div>
-    </section>
-    <div class="footer-note">LUMEN QUEST · Knowledge is your magic.</div>`);
-
-  app.querySelector('[data-upload]')?.addEventListener('click',()=>openNotesModal());
-  app.querySelector('[data-demo]')?.addEventListener('click',createDemo);
-  app.querySelectorAll('[data-play]').forEach(b=>b.addEventListener('click',()=>startQuest(b.dataset.play)));
-  app.querySelectorAll('[data-update]').forEach(b=>b.addEventListener('click',()=>openNotesModal(b.dataset.update)));
+ const quests=state.quests;
+ const rows=quests.map((q,i)=>`<div class="subject-row"><div class="subject-left"><div class="subject-icon">${['✦','⚗','Ψ','Σ','✧'][i%5]}</div><div><div class="subject-title">${esc(q.title)}</div><div class="subject-meta">${q.totalAnswered||0} questions · ${Math.round((q.correct||0)/Math.max(1,q.totalAnswered||0)*100)}% accuracy · updated ${dateLabel(q.updatedAt)}</div></div></div><div class="subject-actions"><button class="mini-btn" data-play="${q.id}">Play</button><button class="mini-btn" data-update="${q.id}">Update notes</button><button class="mini-btn danger" data-delete="${q.id}">Delete</button></div></div>`).join('');
+ mount(`<main class="main"><section class="home-controls"><button class="upload-strip" data-upload><span class="upload-icon">${icon('upload')}</span><span class="upload-copy"><strong>Upload your notes</strong><span>Drop a PDF or browse files</span></span></button><button class="demo-row" data-demo><span class="demo-left"><span class="spark">✣</span><span><span class="demo-title">The first expedition</span><br><span class="demo-meta">Try a biology & chemistry demo</span></span></span><span class="chev">›</span></button><section class="signin-panel"><p>${serverConfig.openaiConfigured?'OpenAI is connected. AI concept questions are ready.':'Connect OpenAI or Gemini for AI-generated concept questions. Local note practice remains available.'}</p><button class="lime-btn" data-ai>${serverConfig.openaiConfigured?'AI connected':'Sign in with ChatGPT'}</button></section></section>${hero()}<div class="section-title"><h2>Your quests</h2><span>One persistent game per subject note package</span></div><section class="subject-list">${rows||'<div class="subject-row"><div class="subject-left"><div class="subject-icon">✦</div><div><div class="subject-title">No subject quests yet</div><div class="subject-meta">Upload your first note package to create one.</div></div></div></div>'}</section><div class="section-title"><h2>The realms</h2><span>A different region is chosen when you enter a subject.</span></div><section class="regions-preview">${regionCards()}</section><div class="footer-note">LUMEN QUEST · YOUR NOTES. YOUR NEXT QUEST.</div></main>`);
+ app.querySelectorAll('[data-upload]').forEach(b=>b.addEventListener('click',()=>openNotes()));app.querySelectorAll('[data-demo]').forEach(b=>b.addEventListener('click',createDemo));app.querySelectorAll('[data-play]').forEach(b=>b.addEventListener('click',()=>startQuest(b.dataset.play)));app.querySelectorAll('[data-update]').forEach(b=>b.addEventListener('click',()=>openNotes(b.dataset.update)));app.querySelectorAll('[data-delete]').forEach(b=>b.addEventListener('click',()=>deleteQuest(b.dataset.delete)));app.querySelectorAll('[data-ai]').forEach(b=>b.addEventListener('click',openAi));
 }
 
-function createDemo(){
-  const existing=state.quests.find(q=>q.demo);
-  if(existing) return startQuest(existing.id);
-  const q={id:id(),title:'The First Expedition',subject:'Biology & Chemistry Demo',demo:true,
-    files:[{name:'Built-in demo notes'}],createdAt:Date.now(),updatedAt:Date.now(),lastRegion:null,totalAnswered:0,correct:0,
-    notes:`Cell membranes regulate movement of substances into and out of cells. Phospholipid bilayers contain hydrophilic heads and hydrophobic tails. Diffusion moves particles down a concentration gradient without direct cellular energy. Active transport can move substances against a concentration gradient and requires energy. Enzymes lower activation energy and are affected by temperature and pH. In atomic structure, orbitals are regions of high probability for finding electrons. An s subshell contains one orbital, a p subshell contains three orbitals, and each orbital can hold up to two electrons with opposite spins.`};
-  state.quests.unshift(q);saveState();startQuest(q.id);
-}
+function modal(html){const back=document.createElement('div');back.className='modal-backdrop';back.innerHTML=`<div class="modal">${html}</div>`;document.body.append(back);const close=()=>back.remove();back.addEventListener('click',e=>{if(e.target===back)close()});back.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',close));return{back,close}}
+function openNotes(qid=null){const q=qid?state.quests.find(x=>x.id===qid):null;const {back,close}=modal(`<h2>${q?'Update notes':'Create a new subject quest'}</h2><p>${q?'The quest, stats, and history stay intact. Only the note package is replaced.':'Each subject note package becomes its own persistent game.'}</p><div class="field"><label>Subject / quest name</label><input class="input" data-title value="${esc(q?.title||'')}" placeholder="e.g. CHEM 201"></div><div class="field"><label>Note package</label><div class="file-drop"><input data-files type="file" multiple accept="application/pdf,.pdf,.txt,.md,text/plain,text/markdown"><div class="small">Searchable PDFs, TXT, or Markdown. Multiple files can be combined.</div></div></div><div class="modal-actions"><button class="modal-btn" data-close>Cancel</button><button class="modal-btn primary" data-save>${q?'Update notes':'Create quest'}</button></div>`);back.querySelector('[data-save]').addEventListener('click',async e=>{const title=back.querySelector('[data-title]').value.trim();const files=[...back.querySelector('[data-files]').files];if(!title)return toast('Give the quest a subject name.');if(!files.length)return toast('Choose at least one notes file.');e.currentTarget.disabled=true;e.currentTarget.textContent='Reading notes…';try{const extracted=await extractFiles(files);const key=q?.noteKey||uid();await notesPut(key,extracted.text);if(q){q.title=title;q.subject=title;q.files=extracted.files;q.noteKey=key;q.updatedAt=Date.now()}else{state.quests.unshift({id:uid(),title,subject:title,files:extracted.files,noteKey:key,createdAt:Date.now(),updatedAt:Date.now(),lastRegion:null,totalAnswered:0,correct:0})}saveMeta();close();renderHome();toast(q?'Notes updated.':'Quest created.')}catch(err){e.currentTarget.disabled=false;e.currentTarget.textContent=q?'Update notes':'Create quest';toast(err.message||'Could not read notes.')}})}
+async function extractFiles(files){const pieces=[];const meta=[];for(const f of files){let text='';if(f.type==='application/pdf'||f.name.toLowerCase().endsWith('.pdf'))text=await extractPdf(f);else text=await f.text();pieces.push(`\n\n===== ${f.name} =====\n${text}`);meta.push({name:f.name,size:f.size})}return{text:pieces.join('\n'),files:meta}}
+async function extractPdf(file){let pdfjs;try{pdfjs=await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs')}catch{throw new Error('PDF reader could not load. Check your connection.')}pdfjs.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';const pdf=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;const parts=[];for(let p=1;p<=pdf.numPages;p++){const page=await pdf.getPage(p);const c=await page.getTextContent();parts.push(c.items.map(i=>i.str).join(' '))}return parts.join('\n')}
+async function deleteQuest(id){const q=state.quests.find(x=>x.id===id);if(!q||!confirm(`Delete ${q.title}?`))return;await notesDelete(q.noteKey);state.quests=state.quests.filter(x=>x.id!==id);saveMeta();renderHome()}
+async function createDemo(){let q=state.quests.find(x=>x.demo);if(!q){const noteKey=uid();await notesPut(noteKey,`Cell membranes regulate movement of substances into and out of cells. Diffusion moves particles from high to low concentration without direct cellular energy. Active transport can move substances against a concentration gradient and requires energy. Isotopes are atoms of the same element with different numbers of neutrons. Enzymes lower activation energy and can be affected by temperature and pH. An s subshell contains one orbital, a p subshell contains three orbitals, and each orbital can hold up to two electrons with opposite spins.`);q={id:uid(),title:'The First Expedition',subject:'Biology & Chemistry Demo',noteKey,demo:true,files:[{name:'Built-in demo notes'}],createdAt:Date.now(),updatedAt:Date.now(),lastRegion:null,totalAnswered:0,correct:0};state.quests.unshift(q);saveMeta()}startQuest(q.id)}
 
-function openModal(html){
-  modalCleanup?.();
-  const wrap=document.createElement('div');wrap.className='modal-backdrop';wrap.innerHTML=`<div class="modal">${html}</div>`;document.body.append(wrap);
-  const close=()=>{wrap.remove();modalCleanup=null};modalCleanup=close;
-  wrap.addEventListener('click',e=>{if(e.target===wrap)close()});
-  wrap.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',close));
-  return {wrap,close};
-}
+function chooseRegion(q){const candidates=REGIONS.filter(r=>r.id!==q.lastRegion);const region=rand(candidates.length?candidates:REGIONS);q.lastRegion=region.id;saveMeta();return region}
+function chooseMonster(region,used=[]){const indexes=[0,1,2,3,4].filter(i=>!used.includes(i));const index=rand(indexes.length?indexes:[0,1,2,3,4]);return{index,name:region.monsters[index]}}
+function monsterSrc(){if(run.region.id==='moonlit'&&run.monster.index===0)return'/assets/mossfang_original.png';return`/assets/monster_${run.region.asset}_${run.monster.index+1}.png`}
+async function startQuest(id){const q=state.quests.find(x=>x.id===id);if(!q)return;const notes=await notesGet(q.noteKey);if(!notes)return toast('This quest has no readable notes. Use Update notes.');const region=chooseRegion(q);const monster=chooseMonster(region);run={quest:q,notes,region,monster,used:[monster.index],playerHp:100,enemyHp:100,answered:0,correct:0,recent:[],deferred:[],question:null,provider:'',feedback:'',phase:'encounter',retrying:false};renderEncounter();prepareQuestion()}
+function renderEncounter(){if(!run)return renderHome();const s=run;const bubble=s.question?`<div class="enemy-bubble"><div class="bubble-speaker">${esc(s.monster.name)}</div>${esc(s.phase==='feedback'?s.feedback:s.question.prompt)}</div>`:'';mount(`<section class="encounter"><div class="enc-bg" style="background-image:url('/assets/region_${s.region.asset}.jpg')"></div><div class="enc-ui"><div class="enc-title"><div class="eyebrow">ENCOUNTER ${String(Math.floor(s.answered/5)+1).padStart(2,'0')}</div><h1>${esc(s.region.name)}</h1></div><div class="arena"><div class="fighter" data-player><img class="mage-art" src="/assets/mage_original.png" alt="Archive Mage"><div class="hp-card hp-player"><div class="hp-top"><span>You · Archive Mage</span><span>${s.playerHp} / 100</span></div><div class="hp-sub"><span>Knowledge is your magic.</span><span>HP</span></div><div class="hp-track"><div class="hp-fill ${s.playerHp<35?'low':''}" style="width:${s.playerHp}%"></div></div></div></div><div class="fighter" data-enemy>${bubble}<img class="monster-art" src="${monsterSrc()}" alt="${esc(s.monster.name)}"><div class="hp-card hp-enemy"><div class="hp-top"><span>${esc(s.monster.name)}</span><span>LV ${Math.max(1,Math.floor((s.quest.totalAnswered||0)/10)+1)}</span></div><div class="hp-sub"><span></span><span>${s.enemyHp} / 100 HP</span></div><div class="hp-track"><div class="hp-fill ${s.enemyHp<35?'low':''}" style="width:${s.enemyHp}%"></div></div>${s.phase==='feedback'&&(s.lastCorrect?`<div class="heal-note">Your spell hits for ${s.lastDamage} damage.</div>`:`<div class="damage-note">You take ${s.lastDamage} damage.</div>` )||''}</div></div></div><div class="cast-bar">${s.phase==='loading'?'<div class="cast-btn"><span class="loading-ring"></span> Preparing your question…</div>':s.phase==='feedback'?'<button class="cast-btn" data-next>Continue →</button>':'<button class="cast-btn" data-cast>⚔ Answer to cast a spell →</button>'}</div></div></section>`,true);app.querySelector('[data-cast]')?.addEventListener('click',renderQuestion);app.querySelector('[data-next]')?.addEventListener('click',afterFeedback)}
+async function prepareQuestion(){if(!run)return;run.phase='loading';renderEncounter();const due=run.deferred.findIndex(x=>x.dueAt<=run.answered);let retryConcept='';if(due>=0){retryConcept=run.deferred.splice(due,1)[0].concept;run.retrying=true}else run.retrying=false;const excerpt=notesExcerpt(run.notes,run.answered,retryConcept);const prefs=aiPrefs();try{const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json',...(prefs.openaiKey?{'x-openai-key':prefs.openaiKey}:{}),...(prefs.geminiKey?{'x-gemini-key':prefs.geminiKey}:{})},body:JSON.stringify({provider:prefs.provider,subject:run.quest.subject,notesExcerpt:excerpt,recentQuestions:run.recent,retryConcept,difficulty:run.answered>10?'hard':'medium'})});const data=await r.json();if(!r.ok)throw new Error(data.error||'Question generation failed');run.question=data.question;run.provider=data.provider;run.recent.push(data.question.prompt);run.recent=run.recent.slice(-12);run.phase='ready';if(data.warning)toast(data.warning)}catch(err){run.phase='loading';toast(err.message||'Could not generate question')}renderEncounter()}
+function notesExcerpt(notes,step,retry=''){if(notes.length<24000)return notes;if(retry){const i=notes.toLowerCase().indexOf(retry.toLowerCase());if(i>=0)return notes.slice(Math.max(0,i-9500),Math.min(notes.length,i+14500))}const max=Math.max(1,notes.length-22000);const start=(step*7919)%max;return notes.slice(start,start+22000)}
+function renderQuestion(){if(!run?.question)return;const s=run;const q=s.question;mount(`<section class="question-page"><div class="q-shell"><div class="q-top"><div class="q-label"><span class="bolt">ϟ</span><span>${s.retrying?'MISSED CONCEPT RETRY':'CONCEPT CHECK'}</span></div><span>Question ${s.answered+1} · ${esc(s.quest.title)}</span></div><div class="q-enemy-line"><img class="q-portrait" src="${monsterSrc()}" alt="${esc(s.monster.name)}"><div class="q-speech"><b>${esc(s.monster.name)}</b>${s.retrying?'I remember where you stumbled. Try the idea again from a different angle.':'Show me what your notes taught you.'}</div></div><h1>${esc(q.prompt)}</h1><div class="answers">${q.choices.map((c,i)=>`<button class="answer" data-answer="${i}"><span class="answer-letter">${'ABCD'[i]}</span><span>${esc(c)}</span></button>`).join('')}</div><div class="q-actions"><button class="q-mini" data-calc>${icon('calc')} Calculator</button><button class="q-mini" data-back>Return to encounter</button></div></div></section>`,true);app.querySelectorAll('[data-answer]').forEach(b=>b.addEventListener('click',()=>answer(Number(b.dataset.answer))));app.querySelector('[data-back]')?.addEventListener('click',renderEncounter);app.querySelectorAll('[data-calc]').forEach(b=>b.addEventListener('click',openCalculator))}
+function answer(i){if(!run||!run.question)return;const s=run;s.answered++;s.quest.totalAnswered=(s.quest.totalAnswered||0)+1;const correct=i===s.question.correctIndex;s.lastCorrect=correct;if(correct){s.correct++;s.quest.correct=(s.quest.correct||0)+1;s.lastDamage=24+Math.floor(Math.random()*13);s.enemyHp=Math.max(0,s.enemyHp-s.lastDamage);s.feedback=s.question.correctFeedback||'Good. Your spell lands.'}else{s.lastDamage=14+Math.floor(Math.random()*9);s.playerHp=Math.max(0,s.playerHp-s.lastDamage);s.feedback=s.question.explanations?.[i]||'That choice does not match the concept being tested. Focus on the relationship or definition in the question.';s.deferred.push({concept:s.question.concept,dueAt:s.answered+3+Math.floor(Math.random()*3)})}saveMeta();s.phase='feedback';renderEncounter();const f=app.querySelector(correct?'[data-enemy]':'[data-player]');f?.classList.add(correct?'hit':'hit')}
+function afterFeedback(){if(!run)return;if(run.playerHp<=0){run.playerHp=100;toast('You recover at the Archive. The missed concept stays queued.')}if(run.enemyHp<=0){const next=chooseMonster(run.region,run.used);run.monster=next;run.used.push(next.index);if(run.used.length===5)run.used=[];run.enemyHp=100;toast(`${next.name} enters the encounter.`)}prepareQuestion()}
 
-function openNotesModal(questId=null){
-  const q=questId?state.quests.find(x=>x.id===questId):null;
-  const {wrap,close}=openModal(`
-    <h2>${q?'Update this quest':'Create a new quest'}</h2>
-    <p>${q?'Choose a new notes package. Lumen Quest will keep this subject game and its stats, but replace the study material with the new package.':'Each upload becomes its own subject game. Uploading another subject later creates a separate quest.'}</p>
-    <div class="field"><label>Subject / quest name</label><input class="input" data-title value="${esc(q?.title||'')}" placeholder="e.g. CHEM 201 — Atomic Structure"></div>
-    <div class="field"><label>Notes package</label><div class="file-drop"><input data-files type="file" multiple accept="application/pdf,.pdf,text/plain,.txt,text/markdown,.md"><div class="small" style="margin-top:8px">Searchable PDFs, TXT, or Markdown. Multiple files can be combined into one subject package.</div></div></div>
-    <div class="small">PDF text is extracted in your browser. Scanned-image PDFs still need OCR before upload.</div>
-    <div class="modal-actions"><button class="btn" data-close>Cancel</button><button class="btn primary" data-save>${q?'Update notes':'Create quest'}</button></div>`);
-  wrap.querySelector('[data-save]').addEventListener('click',async()=>{
-    const title=wrap.querySelector('[data-title]').value.trim();
-    const files=[...wrap.querySelector('[data-files]').files];
-    if(!title) return toast('Give this quest a subject name.');
-    if(!files.length) return toast('Choose at least one notes file.');
-    const btn=wrap.querySelector('[data-save]');btn.disabled=true;btn.textContent='Reading notes…';
-    try{
-      const extracted=await extractFiles(files);
-      if(extracted.text.trim().length<80) throw new Error('I could not extract enough searchable text from that package.');
-      if(q){
-        q.title=title;q.subject=title;q.notes=extracted.text;q.files=extracted.files;q.updatedAt=Date.now();q.noteVersion=(q.noteVersion||1)+1;
-      }else{
-        state.quests.unshift({id:id(),title,subject:title,notes:extracted.text,files:extracted.files,createdAt:Date.now(),updatedAt:Date.now(),lastRegion:null,totalAnswered:0,correct:0,noteVersion:1});
-      }
-      saveState();close();renderHome();toast(q?'Quest notes updated.':'New subject quest created.');
-    }catch(err){btn.disabled=false;btn.textContent=q?'Update notes':'Create quest';toast(err.message||'Could not read notes.');}
-  });
-}
+function openAi(){const p=aiPrefs();const {back,close}=modal(`<h2>Connect AI</h2><p>Lumen Quest supports OpenAI/ChatGPT and Gemini. Auto mode uses OpenAI first, Gemini second, then the local note engine.</p><div class="provider-grid">${['auto','openai','gemini'].map(x=>`<label class="provider-choice ${p.provider===x?'active':''}"><input type="radio" name="provider" value="${x}" ${p.provider===x?'checked':''}>${x==='auto'?'Auto':x==='openai'?'OpenAI / ChatGPT':'Gemini'}</label>`).join('')}</div><div class="field"><label>OpenAI key (optional if OPENAI_API_KEY is already set in Vercel)</label><input class="input" type="password" data-openai value="${esc(p.openaiKey)}" placeholder="sk-…"></div><div class="field"><label>Gemini key (optional)</label><input class="input" type="password" data-gemini value="${esc(p.geminiKey)}" placeholder="AIza…"></div><div class="small">Keys entered here live only in this browser tab. Server-side Vercel environment variables are safer.</div><div class="modal-actions"><button class="modal-btn" data-close>Cancel</button><button class="modal-btn primary" data-save>Save</button></div>`);back.querySelector('[data-save]').addEventListener('click',()=>{saveAiPrefs({provider:back.querySelector('input[name=provider]:checked').value,openaiKey:back.querySelector('[data-openai]').value.trim(),geminiKey:back.querySelector('[data-gemini]').value.trim()});close();toast('AI preferences saved for this tab.')})}
+function openCalculator(){const {back}=modal(`<h2>Scientific Calculator</h2><div class="calc-history" data-hist></div><div class="calc-display" data-display>0</div><div class="calc-grid">${[['7','7'],['8','8'],['9','9'],['÷','/'],['sin','sin('],['cos','cos('],['4','4'],['5','5'],['6','6'],['×','*'],['tan','tan('],['√','sqrt('],['1','1'],['2','2'],['3','3'],['−','-'],['log','log10('],['ln','ln('],['0','0'],['.','.'],['π','pi'],['+','+'],['(', '('],[')',')'],['x²','^2'],['^','^'],['AC','AC'],['⌫','BK'],['=','=']].map(([t,v])=>`<button class="calc-key ${v==='='?'eq':''}" data-k="${esc(v)}">${t}</button>`).join('')}</div><div class="modal-actions"><button class="modal-btn" data-close>Close</button></div>`);let expr='';const d=back.querySelector('[data-display]'),h=back.querySelector('[data-hist]');const show=()=>d.textContent=expr||'0';back.querySelectorAll('[data-k]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.k;if(k==='AC'){expr='';h.textContent='';show();return}if(k==='BK'){expr=expr.slice(0,-1);show();return}if(k==='='){try{const n=calc(expr);h.textContent=expr+' =';expr=String(n);show()}catch{h.textContent='Invalid expression'}return}expr+=k;show()}))}
+function calc(raw){let e=String(raw).replace(/\^/g,'**').replace(/\bpi\b/g,'Math.PI').replace(/\bsin\(/g,'Math.sin(').replace(/\bcos\(/g,'Math.cos(').replace(/\btan\(/g,'Math.tan(').replace(/\bsqrt\(/g,'Math.sqrt(').replace(/\blog10\(/g,'Math.log10(').replace(/\bln\(/g,'Math.log(');if(!/^[0-9+\-*/().\sA-Za-z*,]+$/.test(e))throw Error();const n=Function(`"use strict";return (${e})`)();if(!Number.isFinite(n))throw Error();return Math.round((n+Number.EPSILON)*1e12)/1e12}
 
-async function extractFiles(files){
-  const out=[];const chunks=[];
-  for(const file of files){
-    const lower=file.name.toLowerCase();let text='';
-    if(lower.endsWith('.pdf')||file.type==='application/pdf') text=await extractPdf(file);
-    else text=await file.text();
-    out.push({name:file.name,size:file.size});
-    chunks.push(`\n\n===== ${file.name} =====\n${text}`);
-  }
-  return {text:chunks.join('\n'),files:out};
-}
-
-async function extractPdf(file){
-  let pdfjs;
-  try{pdfjs=await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs');}
-  catch{throw new Error('PDF reader could not load. Check your internet connection, or upload TXT/Markdown notes instead.');}
-  pdfjs.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
-  const data=new Uint8Array(await file.arrayBuffer());
-  const pdf=await pdfjs.getDocument({data}).promise;
-  const parts=[];
-  for(let p=1;p<=pdf.numPages;p++){
-    const page=await pdf.getPage(p);const content=await page.getTextContent();
-    parts.push(content.items.map(i=>i.str).join(' '));
-  }
-  return parts.join('\n');
-}
-
-function chooseRegion(quest){
-  const options=REGIONS.filter(r=>r.id!==quest.lastRegion);
-  const region=rand(options.length?options:REGIONS);quest.lastRegion=region.id;saveState();return region;
-}
-function chooseMonster(region,used=[]){
-  const names=region.monsters.filter(n=>!used.includes(n));const name=rand(names.length?names:region.monsters);return {name,index:region.monsters.indexOf(name)};
-}
-
-function startQuest(questId){
-  const quest=state.quests.find(q=>q.id===questId);if(!quest)return;
-  const region=chooseRegion(quest);const monster=chooseMonster(region,[]);
-  session={quest,region,monster,usedMonsters:[monster.name],playerHp:100,enemyHp:100,answered:0,correct:0,recent:[],deferred:[],question:null,phase:'loading',provider:'',selected:null};
-  renderBattle();loadNextQuestion();
-}
-
-function renderBattle(){
-  const s=session;if(!s)return renderHome();
-  const bubble = s.phase==='loading' ? `<div class="speech loading"><div class="speaker">${esc(s.monster.name)}</div>Consulting your notes…</div>` : s.question ? `<div class="speech ${s.phase==='wrong'?'wrong':s.phase==='correct'?'correct':''}"><div class="speaker">${esc(s.monster.name)}</div>${esc(s.phase==='asking'?s.question.prompt:s.feedback||s.question.prompt)}</div>` : '';
-  const answers = s.question ? s.question.choices.map((c,i)=>`<button class="answer ${s.selected===i?(s.phase==='wrong'?'chosen-wrong':s.phase==='correct'?'chosen-correct':''):''}" data-answer="${i}" ${s.phase!=='asking'?'disabled':''}><span class="letter">${'ABCD'[i]}</span><span>${esc(c)}</span></button>`).join('') : '<div class="small">Generating a fresh question from your notes…</div>';
-  shell(`<div class="battle-page"><div class="region-stage region-${s.region.id}"></div><div class="battle-ui">
-    <div class="battle-head"><div class="region-label"><div class="title">${esc(s.region.name)}</div><div class="sub">${esc(s.region.subtitle)}</div></div><div class="battle-head-actions"><span class="badge">${esc(s.provider||'question engine')}</span></div></div>
-    <div class="arena">
-      <div class="player-zone"><div class="status-card"><div class="status-row"><span class="player-name">THE SCHOLAR</span><span>Lv. ${Math.max(1,Math.floor((s.quest.totalAnswered||0)/10)+1)}</span></div><div class="hp-track"><div class="hp-fill ${s.playerHp<35?'low':''}" style="width:${s.playerHp}%"></div></div></div><div class="sprite-wrap" data-player>${mageSvg()}</div></div>
-      <div class="enemy-zone">${bubble}<div class="status-card"><div class="status-row"><span class="enemy-name">${esc(s.monster.name)}</span><span>${s.enemyHp}/100</span></div><div class="hp-track"><div class="hp-fill ${s.enemyHp<35?'low':''}" style="width:${s.enemyHp}%"></div></div></div><div class="sprite-wrap" data-enemy>${monsterSvg(s.region.id,s.monster.index)}</div></div>
-    </div>
-    <div class="question-panel"><div class="question-meta"><span>${s.question?esc(s.question.concept):'Preparing question'}${s.retrying?' · RETRY':''}</span><span>${s.answered} answered · ${Math.round((s.correct/Math.max(1,s.answered))*100)}% this run</span></div><div class="answers">${answers}</div>${s.phase==='wrong'||s.phase==='correct'?'<div class="continue-row"><button class="btn primary" data-continue>Continue</button></div>':''}</div>
-  </div></div>`,true);
-  app.querySelectorAll('[data-answer]').forEach(b=>b.addEventListener('click',()=>answerQuestion(Number(b.dataset.answer))));
-  app.querySelector('[data-continue]')?.addEventListener('click',afterFeedback);
-}
-
-async function loadNextQuestion(){
-  const s=session;if(!s)return;
-  s.phase='loading';s.selected=null;s.feedback='';s.retrying=false;renderBattle();
-  const dueIndex=s.deferred.findIndex(x=>x.dueAt<=s.answered);
-  let retryConcept='';
-  if(dueIndex>=0){const item=s.deferred.splice(dueIndex,1)[0];retryConcept=item.concept;s.retrying=true;}
-  const excerpt=notesExcerpt(s.quest.notes,s.answered,retryConcept);
-  const ai=aiSession();
-  try{
-    const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json',...(ai.openaiKey?{'x-openai-key':ai.openaiKey}:{}),...(ai.geminiKey?{'x-gemini-key':ai.geminiKey}:{})},body:JSON.stringify({provider:ai.provider,subject:s.quest.subject,notesExcerpt:excerpt,recentQuestions:s.recent,retryConcept,difficulty:s.answered>8?'hard':'medium'})});
-    const data=await r.json();if(!r.ok)throw new Error(data.error||'Question generation failed');
-    s.question=data.question;s.provider=data.provider;s.phase='asking';s.recent.push(s.question.prompt);s.recent=s.recent.slice(-10);if(data.warning)toast(data.warning);
-  }catch(err){toast(err.message||'Could not generate question');s.phase='loading';}
-  renderBattle();
-}
-
-function notesExcerpt(notes,step,retryConcept=''){
-  const clean=String(notes||'');if(clean.length<22000)return clean;
-  if(retryConcept){const i=clean.toLowerCase().indexOf(retryConcept.toLowerCase());if(i>=0)return clean.slice(Math.max(0,i-9000),Math.min(clean.length,i+13000));}
-  const chunk=20000;const max=Math.max(1,clean.length-chunk);const start=(step*7919)%max;return clean.slice(start,start+chunk);
-}
-
-function answerQuestion(i){
-  const s=session;if(!s||s.phase!=='asking')return;s.selected=i;s.answered++;s.quest.totalAnswered=(s.quest.totalAnswered||0)+1;
-  if(i===s.question.correctIndex){
-    s.correct++;s.quest.correct=(s.quest.correct||0)+1;s.phase='correct';s.feedback=s.question.correctFeedback||'Correct — your spell lands.';s.enemyHp=Math.max(0,s.enemyHp-(24+Math.floor(Math.random()*13)));
-    renderBattle();animate('[data-enemy]','enemy-hit');
-  }else{
-    s.phase='wrong';s.feedback=s.question.explanations?.[i]||'That choice does not match the concept being tested. Review what relationship or definition the question is asking about.';s.playerHp=Math.max(0,s.playerHp-(14+Math.floor(Math.random()*9)));
-    const dueAt=s.answered+3+Math.floor(Math.random()*3);s.deferred.push({concept:s.question.concept,dueAt,origin:s.question.prompt});
-    renderBattle();animate('[data-player]','hit');
-  }
-  saveState();
-}
-
-function animate(sel,klass){const el=app.querySelector(sel);if(!el)return;el.classList.add(klass);setTimeout(()=>el.classList.remove(klass),420)}
-function afterFeedback(){
-  const s=session;if(!s)return;
-  if(s.playerHp<=0){s.playerHp=100;toast('Campfire recovery: HP restored. The missed concept stays in the retry queue.');}
-  if(s.enemyHp<=0){const m=chooseMonster(s.region,s.usedMonsters);s.monster=m;s.usedMonsters.push(m.name);if(s.usedMonsters.length>=s.region.monsters.length)s.usedMonsters=[];s.enemyHp=100;toast(`A new foe appears: ${m.name}`);}
-  loadNextQuestion();
-}
-
-function openAiModal(){
-  const current=aiSession();
-  const {wrap,close}=openModal(`<h2>Connect AI</h2><p>OpenAI is supported alongside Gemini. In <b>Auto</b> mode, Lumen Quest tries OpenAI first and Gemini second, then falls back to local note-based practice.</p>
-  <div class="provider-grid">
-    ${['auto','openai','gemini'].map(p=>`<label class="provider-choice ${current.provider===p?'active':''}"><input type="radio" name="provider" value="${p}" ${current.provider===p?'checked':''}>${p==='auto'?'Auto (OpenAI → Gemini)':p==='openai'?'OpenAI / ChatGPT':'Gemini'}</label>`).join('')}
-  </div>
-  <div class="field"><label>OpenAI API key (optional if the server already has OPENAI_API_KEY)</label><input class="input" data-openai type="password" value="${esc(current.openaiKey||'')}" placeholder="sk-…"></div>
-  <div class="field"><label>Gemini API key (optional)</label><input class="input" data-gemini type="password" value="${esc(current.geminiKey||'')}" placeholder="AIza…"></div>
-  <div class="small">Keys entered here are stored only in this browser tab's session storage and sent only to this app's own server endpoint when generating a question. For a deployed version, server-side environment variables are safer and require no key entry in the browser.</div>
-  <div class="modal-actions"><button class="btn" data-close>Cancel</button><button class="btn primary" data-save-ai>Save connection</button></div>`);
-  wrap.querySelectorAll('input[name=provider]').forEach(r=>r.addEventListener('change',()=>wrap.querySelectorAll('.provider-choice').forEach(x=>x.classList.toggle('active',x.querySelector('input').checked))));
-  wrap.querySelector('[data-save-ai]').addEventListener('click',()=>{saveAiSession({provider:wrap.querySelector('input[name=provider]:checked').value,openaiKey:wrap.querySelector('[data-openai]').value.trim(),geminiKey:wrap.querySelector('[data-gemini]').value.trim()});close();toast('AI connection preferences saved for this tab.');if(session)loadNextQuestion();});
-}
-
-function openCalculator(){
-  const {wrap}=openModal(`<h2>Scientific Calculator</h2><div class="calc-history" data-history></div><div class="calc-display" data-display>0</div><div class="calc-grid">
-    ${[['7','7'],['8','8'],['9','9'],['÷','/','op'],['sin','sin(','op'],['cos','cos(','op'],['4','4'],['5','5'],['6','6'],['×','*','op'],['tan','tan(','op'],['√','sqrt(','op'],['1','1'],['2','2'],['3','3'],['−','-','op'],['log','log10(','op'],['ln','ln(','op'],['0','0'],['.','.'],['π','pi','op'],['+','+','op'],['(', '(','op'],[')',')','op'],['x²','^2','op'],['^','^','op'],['AC','AC'],['⌫','BK'],['=','=','eq']].map(([t,v,c=''])=>`<button class="calc-key ${c}" data-key="${esc(v)}">${t}</button>`).join('')}
-  </div><div class="modal-actions"><button class="btn" data-close>Close</button></div>`);
-  let expr='';const display=wrap.querySelector('[data-display]');const hist=wrap.querySelector('[data-history]');
-  const show=()=>display.textContent=expr||'0';
-  wrap.querySelectorAll('[data-key]').forEach(b=>b.addEventListener('click',()=>{
-    const k=b.dataset.key;if(k==='AC'){expr='';hist.textContent='';show();return}if(k==='BK'){expr=expr.slice(0,-1);show();return}if(k==='='){try{const ans=calc(expr);hist.textContent=expr+' =';expr=String(ans);show()}catch{hist.textContent='Invalid expression'}return}expr+=k;show();
-  }));
-}
-function calc(raw){
-  let e=String(raw).replace(/\^/g,'**').replace(/\bpi\b/g,'Math.PI').replace(/\bsin\(/g,'Math.sin(').replace(/\bcos\(/g,'Math.cos(').replace(/\btan\(/g,'Math.tan(').replace(/\bsqrt\(/g,'Math.sqrt(').replace(/\blog10\(/g,'Math.log10(').replace(/\bln\(/g,'Math.log(');
-  if(!/^[0-9+\-*/().\sA-Za-z*,]+$/.test(e))throw new Error('bad');
-  if(/[^0-9+\-*/().\sMathPIincsqrlogta]/.test(e.replace(/Math\.(PI|sin|cos|tan|sqrt|log10|log)/g,'')))throw new Error('bad');
-  const n=Function(`"use strict";return (${e})`)();if(!Number.isFinite(n))throw new Error('bad');return Math.round((n+Number.EPSILON)*1e12)/1e12;
-}
-
-function mageSvg(){return `<svg class="player-sprite" viewBox="0 0 180 220" shape-rendering="crispEdges" aria-label="Crystal mage">
-<ellipse cx="90" cy="205" rx="58" ry="10" fill="#02050488"/>
-<path d="M55 185h70l-8-67-27-23-27 23z" fill="#244b43" stroke="#08100d" stroke-width="6"/>
-<path d="M68 118h44l13 62H53z" fill="#2d6457"/><path d="M75 96h30l13 27H62z" fill="#1b3f38"/>
-<rect x="76" y="67" width="28" height="31" fill="#d6b596" stroke="#08100d" stroke-width="5"/><path d="M65 73l25-46 29 49-23-7z" fill="#335d54" stroke="#08100d" stroke-width="6"/><path d="M81 76h6v6h-6zm14 0h6v6h-6z" fill="#16221c"/>
-<path d="M56 125l-24 41" stroke="#101711" stroke-width="9"/><path d="M31 167l-1-59" stroke="#57452a" stroke-width="7"/><polygon points="30,95 45,113 30,130 15,113" fill="#8fe9df" stroke="#10211c" stroke-width="5"/><rect x="74" y="128" width="32" height="8" fill="#d5c576"/>
-</svg>`}
-
-function monsterSvg(region,variant){
-  const palettes={forest:['#315b32','#78a85e','#b9d57a'],snow:['#7fa6b5','#d8f0f3','#82d2e7'],underworld:['#5b1a20','#c84b24','#ffad3d'],kingdom:['#665a44','#c7a653','#f4e4a1'],coast:['#234d5b','#54a1ad','#b5f1e7'],astral:['#38255c','#825bc0','#e0b5ff']};
-  const [a,b,c]=palettes[region];
-  const extras=[
-    `<path d="M58 70L30 38l44 18m48 14l28-32-44 18" fill="${b}" stroke="#111" stroke-width="6"/>`,
-    `<path d="M70 48L85 16l14 33m-42 17L34 48m88 18l23-18" fill="none" stroke="${c}" stroke-width="9"/>`,
-    `<circle cx="45" cy="88" r="17" fill="${c}" stroke="#111" stroke-width="6"/><circle cx="135" cy="88" r="17" fill="${c}" stroke="#111" stroke-width="6"/>`,
-    `<path d="M62 42h56l-7-24H69z" fill="${c}" stroke="#111" stroke-width="6"/><rect x="83" y="13" width="15" height="28" fill="${b}"/>`,
-    `<path d="M55 80C30 54 22 114 50 125M125 80c25-26 33 34 5 45" fill="none" stroke="${c}" stroke-width="13"/>`
-  ];
-  return `<svg class="enemy-sprite" viewBox="0 0 200 220" shape-rendering="crispEdges" aria-label="Monster">
-    <ellipse cx="100" cy="205" rx="70" ry="11" fill="#0007"/>${extras[variant%extras.length]}
-    <path d="M55 88l18-35h54l18 35 18 35-15 58H52l-15-58z" fill="${a}" stroke="#0d1010" stroke-width="7"/>
-    <path d="M66 88l34-23 34 23-8 67H74z" fill="${b}" opacity=".85"/>
-    <rect x="70" y="91" width="19" height="14" fill="#101514"/><rect x="111" y="91" width="19" height="14" fill="#101514"/><rect x="77" y="95" width="6" height="6" fill="${c}"/><rect x="117" y="95" width="6" height="6" fill="${c}"/>
-    <path d="M82 126h36l-8 16H90z" fill="#14110f"/><path d="M67 179l-10 29m76-29l10 29" stroke="#111" stroke-width="12"/>
-    <polygon points="100,120 111,136 100,156 89,136" fill="${c}" stroke="#111" stroke-width="4"/>
-  </svg>`;
-}
-
-await refreshConfig();
-renderHome();
+if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
+await refreshConfig();renderHome();
