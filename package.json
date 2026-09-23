@@ -1,0 +1,7 @@
+{
+  "name": "lumen-quest",
+  "version": "2.1.0",
+  "private": true,
+  "description": "Lumen Quest study RPG for Vercel",
+  "engines": { "node": ">=18" }
+}
